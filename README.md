@@ -69,6 +69,14 @@ gcloud config set project <PROJECT_ID>
 
 ## Migrering
 
+For at det skal være mulig for serviceaccount-brukeren å lese fra databasen man ønsker å dumpe, må det gis tilganger
+til skjemaet og til tabellene i denne databasen: 
+
+```postgresql
+GRANT USAGE on SCHEMA public to "cloudsqliamserviceaccount";
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO "cloudsqliamserviceaccount";
+```
+
 ### 1. Koble til proxy
 
 Hent ut instansbeskrivelse fra gcloud:
