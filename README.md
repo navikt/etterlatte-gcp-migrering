@@ -79,6 +79,14 @@ Eksempel:
 `kubectl get secret google-sql-etterlatte-vilkaarsvurdering -o json | jq '.data | map_values(@base64d)'`
 og logg inn som rot.(anbefales ikke)
 
+## Legg inn tabeller uten flyway tabeller i app man ønsker å migrere til
+Her er det veldig lurt å tenke på om man vi vil legge på indeksene i etterkant da 
+insert med hele tabellen sammen med indeksering kan ta kjempelang tid.
+
+For å finne skjemadefinisjonene man vil legge kan man se dette ved å kjøre feks:
+`pg_dump -h localhost -p 5432 -U dinbruker@nav.no(eller lignende) -d vilkaarsvurdering --schema-only`
+
+
 ## Migrering
 
 ### 1. Koble til proxy
