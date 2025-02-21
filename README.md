@@ -67,6 +67,26 @@ Sett prosjekt (miljø) du skal migrere:
 gcloud config set project <PROJECT_ID>
 ```
 
+# Før migrering må man grante usage på schema og på tabeller
+```GRANT USAGE on SCHEMA public to "cloudsqliamserviceaccount";```
+
+```GRANT INSERT ON ALL TABLES IN SCHEMA public TO "cloudsqliamserviceaccount"; ```
+
+#### OBS! Er nye tabeller lagt til må de også få spesifikk GRANT kjørt på seg. 
+Dette må da gjøres via deploy(anbefalt) eller via superbruker da utviklere via iam tilgang
+ikke har lov til å grante via ` nais postgres proxy`.
+Eksempel: 
+`kubectl get secret google-sql-etterlatte-vilkaarsvurdering -o json | jq '.data | map_values(@base64d)'`
+og logg inn som rot.(anbefales ikke)
+
+## Legg inn tabeller uten flyway tabeller i app man ønsker å migrere til
+Her er det veldig lurt å tenke på om man vi vil legge på indeksene i etterkant da 
+insert med hele tabellen sammen med indeksering kan ta kjempelang tid.
+
+For å finne skjemadefinisjonene man vil legge kan man se dette ved å kjøre feks:
+`pg_dump -h localhost -p 5432 -U dinbruker@nav.no(eller lignende) -d vilkaarsvurdering --schema-only`
+
+
 ## Migrering
 
 ### 1. Koble til proxy
@@ -102,13 +122,26 @@ pg_dump -h localhost -p 5432 -U <MIGRATION_USER> -d <DATABASE_NAME> -f /data/dum
 
 ### 3. Gjenopprett dumpet data
 
-Når data er dumpet til pod kan det gjenopprettes i ønsket database. 
-
-// TODO: Resten av bruksanvisningen...
+Når data er dumpet til pod kan det gjenopprettes i ønsket database.
+Eksempel
+```
+cloud_sql_proxy -enable_iam_login -instances=etterlatte-prod-207c:europe-north1:etterlatte-sakogbehandlinger=tcp:5432 &
+psql -h localhost -p 5432 -U migration-user@etterlatte-dev-9b0b.iam sakogbehandlinger -f /data/test.sql
+```
+OBS: husk å endre instanse basert på miljø.
+Dette finner man ved å kjøre `gcloud projects list`.
 
 https://confluence.adeo.no/display/TE/Migreringssteg+for+database
 
 Dette burde samles på ett sted...
+
+#### OBS!
+Her kan du få feilmeldinger ala `error: invalid command \N`
+Dette er ikke den reelle feilen men kan være at tabellene ikke er riktig laget
+eller at man mangler tilgang. feks
+` ERROR:  permission denied for table behandling_versjon
+psql:/data/test.sql:7662: error: invalid command \.`
+Da må man grante `cloudsqliamserviceaccount` mot denne tabellen med rettighetene man trenger.
 
 ## Cleanup
 
