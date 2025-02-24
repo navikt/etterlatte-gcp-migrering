@@ -1,0 +1,60 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gcloud
+  namespace: etterlatte
+spec:
+  egress:
+    - ports:
+        - port: 80
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 199.36.153.10/32
+        - ipBlock:
+            cidr: 199.36.153.11/32
+        - ipBlock:
+            cidr: 199.36.153.8/32
+        - ipBlock:
+            cidr: 199.36.153.9/32
+    - ports:
+        - port: 5432
+          protocol: TCP
+          #Db port
+        - port: 3307
+          protocol: TCP
+      # Her må man legge til public ips for dber man ønsker å connecte mot med cloud-sql-proxy
+      to:
+        - ipBlock: #grunnlag
+            cidr: 34.88.110.171/32
+        - ipBlock: #sakogbehandlinger
+            cidr: 34.88.12.12/32
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+    - to:
+        - ipBlock:
+            cidr: 10.7.3.0/24
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              linkerd.io/is-control-plane: "true"
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              linkerd.io/is-control-plane: "true"
+  podSelector:
+    matchLabels:
+      app: gcloud
+  policyTypes:
+    - Egress
+    - Ingress
