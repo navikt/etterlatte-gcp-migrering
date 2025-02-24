@@ -100,6 +100,12 @@ GRANT USAGE on SCHEMA public to "<SERVICEACCOUNT-USER>";
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO "<SERVICEACCOUNT-USER>";
 ```
 
+OBS: Serviceaccount brukeren må også legges inn manuelt i brukerseksjonen på cloud console ellers vil man få auth feil når man connecter mot databasen
+"Add user account" her https://console.cloud.google.com/sql/instances/etterlatte-sakogbehandlinger/users?authuser=1&inv=1&invt=AbqdIQ&project=etterlatte-prod-207c&rapt=AEjHL4O5-Yd1XwWAQJvYDtURcVk44X4RtujH_D8K3TA8gMSaFNxK6udNwQf9GmGEsBAV2J6kQcOl44r-_nyKyOCAXiLSe8OgTY17CDf946Z_oiRqHj4cGhs
+Her må man legge inn hele quailified name på service account brukeren altså `migrering-user@etterlatte-prod-207c.iam.gserviceaccount.com`
+
+Ellers får man: `pg_dump: error: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL:  password authentication failed for user "migration-user@etterlatte-prod-207c.iam"`
+
 ### 1. Koble til proxy
 
 Hent ut instansbeskrivelse fra gcloud:
