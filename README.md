@@ -1,6 +1,6 @@
 # etterlatte-gcp-migrering
 
-Verktøy for å gjennomføre databasemigrering fra on-premises databaser til Google Cloud SQL.
+Verktøy for å gjennomføre databasemigrering mellom Google Cloud SQL databaser. 
 
 ## Forarbeid
 
@@ -40,6 +40,9 @@ _OBS: Pod-en må startes på nytt for at den skal lese nøkkelen som ble lagt ti
 ### 5. Apply network
 
 For at appen skal kunne kommunisere med andre apper sin database må pod-en sin nettverkspolicy endres.
+
+Ip'ene som refereres må peke på riktige public ip'er for databasene som skal aksesseres. Dette finner man i oversikten over 
+databaseinstanser i GCP Console. 
 
 Hent ned gjeldende `network.yaml` og kjør: 
 
@@ -88,6 +91,14 @@ For å finne skjemadefinisjonene man vil legge kan man se dette ved å kjøre fe
 
 
 ## Migrering
+
+For at det skal være mulig for serviceaccount-brukeren å lese fra databasen som det skal gjøres dump av, må det gis tilganger
+til skjemaet og til tabellene i denne databasen:
+
+```postgresql
+GRANT USAGE on SCHEMA public to "<SERVICEACCOUNT-USER>";
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO "<SERVICEACCOUNT-USER>";
+```
 
 ### 1. Koble til proxy
 
