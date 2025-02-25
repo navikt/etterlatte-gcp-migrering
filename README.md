@@ -1,8 +1,11 @@
 # etterlatte-gcp-migrering
 
-Verktøy for å gjennomføre databasemigrering mellom Google Cloud SQL databaser. 
+Verktøy for å gjennomføre databasemigrering mellom Google Cloud SQL databaser på en sikker måte. 
 
-## Forarbeid
+Med denne fremgangsmåten er det også mulig å velge spesifikke tabeller som skal migreres. Dette i motsetning til andre verktøy som kun tilbyr 
+migrering av hele databaser. 
+
+## Forarbeid gcp-application
 
 ### 1. Start app for migrering
 
@@ -13,9 +16,7 @@ kubectl apply -f gcloud.yaml
 
 ### 2. Generer servicebruker
 
-OBS: Hvis det allerede finnes en servicebruker kan denne benyttes.
-
-Hvis det _ikke_ finnes servicebruker kan det opprettes i GCP Console:
+Hvis det allerede finnes en servicebruker kan denne benyttes. Hvis ikke kan det opprettes i GCP Console:
 
 https://console.cloud.google.com/iam-admin/serviceaccounts/create?walkthrough_id=iam--create-service-account
 
@@ -23,10 +24,10 @@ https://console.cloud.google.com/iam-admin/serviceaccounts/create?walkthrough_id
 
 - Gå til [IAM & Admin / Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
 - Velg "actions" -> "Manage keys" -> "Add key"
-- JSON-tokenet som opprettes må så legges i `secret.yaml`
+- JSON-tokenet som opprettes må så legges i `secret.yaml`.
 
 
-### 4. Apply secrets
+### 4. Apply secret
 
 Når stegene over er utført kan du kjøre:
 
@@ -34,24 +35,31 @@ Når stegene over er utført kan du kjøre:
 kubectl apply -f secret.yaml
 ```
 
-_OBS: Pod-en må startes på nytt for at den skal lese nøkkelen som ble lagt til._
+### 5. Apply network policy
 
-
-### 5. Apply network
-
-For at appen skal kunne kommunisere med andre apper sin database må pod-en sin nettverkspolicy endres.
+For at appen skal kunne kommunisere med andre apper sin database må network policy for pod-en legges til.
 
 Ip'ene som refereres må peke på riktige public ip'er for databasene som skal aksesseres. Dette finner man i oversikten over 
 databaseinstanser i GCP Console. 
 
-Hent ned gjeldende `network.yaml` og kjør: 
+Oppdater `network-<dev/prod>.yaml` med riktige ip'er og kjør: 
 
 ```shell
-kubectl apply -f network.yaml
+kubectl apply -f network-<dev/prod>.yaml
+```
+
+### 6. Restart pod for å få med siste endringer
+Pod-en må startes på nytt for at den skal lese secret og network policy som ble lagt til.
+```shell
+kubectl scale deployment <POD_ID> --replicas=0
+```
+Vent til pod'en er slått av, kjør så:
+```shell
+kubectl scale deployment <POD_ID> --replicas=1
 ```
 
 
-### 6. Aktiver servicebruker
+### 7. Logg inn og aktiver servicebruker
 
 Exec inn i pod'en:
 ```
@@ -70,41 +78,44 @@ Sett prosjekt (miljø) du skal migrere:
 gcloud config set project <PROJECT_ID>
 ```
 
-# Før migrering må man grante usage på schema og på tabeller
-```GRANT USAGE on SCHEMA public to "cloudsqliamserviceaccount";```
+Instansen er nå klar til å koble seg på databaser og starte migreringen.
 
-```GRANT INSERT ON ALL TABLES IN SCHEMA public TO "cloudsqliamserviceaccount"; ```
+## Forarbeid databaser
+Videre guide tar utgangspunkt i at skjemadefinisjoner (DDL) allerede er opprettet i 
+databasen det migreres til. For å hente ut dette kan man kjøre:
 
-#### OBS! Er nye tabeller lagt til må de også få spesifikk GRANT kjørt på seg. 
-Dette må da gjøres via deploy(anbefalt) eller via superbruker da utviklere via iam tilgang
-ikke har lov til å grante via ` nais postgres proxy`.
-Eksempel: 
-`kubectl get secret google-sql-etterlatte-vilkaarsvurdering -o json | jq '.data | map_values(@base64d)'`
-og logg inn som rot.(anbefales ikke)
+```shell
+pg_dump -h localhost -p 5432 -U <BRUKER> -d <DATABASE> --schema-only --exclude-table-data=flyway_schema_history
+```
 
-## Legg inn tabeller uten flyway tabeller i app man ønsker å migrere til
-Her er det veldig lurt å tenke på om man vi vil legge på indeksene i etterkant da 
-insert med hele tabellen sammen med indeksering kan ta kjempelang tid.
+Det kan være lurt å tenke på om man vi vil legge på indeksene i etterkant da
+insert med hele tabellen sammen med indeksering kan ta lang tid. 
 
-For å finne skjemadefinisjonene man vil legge kan man se dette ved å kjøre feks:
-`pg_dump -h localhost -p 5432 -U dinbruker@nav.no(eller lignende) -d vilkaarsvurdering --schema-only`
+For å kunne lese og skrive til databasene det skal migreres fra og til, må servicebrukeren få tilganger.
+Dette gjøres på følgende måte:
 
+### 1. Gi service-account brukeren tilgang til database-instansene
+Service-account brukeren må legges inn manuelt i brukerseksjonen på database-instansene det skal migreres mellom i cloud console.
+Velg "Add user account" og skriv inn hele brukernavnet (feks `migrering-user@etterlatte-prod-207c.iam.gserviceaccount.com`).
 
-## Migrering
-
-For at det skal være mulig for serviceaccount-brukeren å lese fra databasen som det skal gjøres dump av, må det gis tilganger
-til skjemaet og til tabellene i denne databasen:
-
+### 2. Sett opp les-tilgang i database det skal migreres fra
+Før migrering må det gis tilgang til skjema og tabeller hvor det skal leses fra:
 ```postgresql
 GRANT USAGE on SCHEMA public to "<SERVICEACCOUNT-USER>";
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO "<SERVICEACCOUNT-USER>";
 ```
 
-OBS: Serviceaccount brukeren må også legges inn manuelt i brukerseksjonen på cloud console ellers vil man få auth feil når man connecter mot databasen
-"Add user account" her https://console.cloud.google.com/sql/instances/etterlatte-sakogbehandlinger/users?authuser=1&inv=1&invt=AbqdIQ&project=etterlatte-prod-207c&rapt=AEjHL4O5-Yd1XwWAQJvYDtURcVk44X4RtujH_D8K3TA8gMSaFNxK6udNwQf9GmGEsBAV2J6kQcOl44r-_nyKyOCAXiLSe8OgTY17CDf946Z_oiRqHj4cGhs
-Her må man legge inn hele quailified name på service account brukeren altså `migrering-user@etterlatte-prod-207c.iam.gserviceaccount.com`
-`migration-user` vs `migrering-user`
-Ellers får man: `pg_dump: error: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL:  password authentication failed for user "migration-user@etterlatte-prod-207c.iam"`
+### 3. Sett opp skriv-tilgang i database det skal migreres til
+Videre må det gis tilgang til skjema og tabeller det skal skrives til:
+```postgresql
+GRANT USAGE on SCHEMA public to "<SERVICEACCOUNT-USER>";
+GRANT INSERT ON ALL TABLES IN SCHEMA public TO "<SERVICEACCOUNT-USER>"; 
+```
+
+Alternativt rollen "cloudsqliamserviceaccount"
+
+
+## Uføre migrering
 
 ### 1. Koble til proxy
 
@@ -138,32 +149,48 @@ pg_dump -h localhost -p 5432 -U <MIGRATION_USER> -d <DATABASE_NAME> -f /data/dum
 ```
 
 ### 3. Gjenopprett dumpet data
+Når data er dumpet til pod kan det gjenopprettes i ønsket database. Først må gjeldende `cloud_sql_proxy` fjernes, og ny proxy settes opp mot
+databasen det skal importeres til som angitt i steg 1.
 
-Når data er dumpet til pod kan det gjenopprettes i ønsket database.
-Eksempel
+Videre kan import kjøres på følgende måte:
+```shell
+psql -h localhost -p 5432 -U <MIGRATION_USER> <DATABASE_NAME> -f /data/dump.sql
 ```
-cloud_sql_proxy -enable_iam_login -instances=etterlatte-prod-207c:europe-north1:etterlatte-sakogbehandlinger=tcp:5432 &
-psql -h localhost -p 5432 -U migration-user@etterlatte-dev-9b0b.iam sakogbehandlinger -f /data/test.sql
-```
-OBS: husk å endre instanse basert på miljø.
-Dette finner man ved å kjøre `gcloud projects list`.
-
-https://confluence.adeo.no/display/TE/Migreringssteg+for+database
-
-Dette burde samles på ett sted...
-
-#### OBS!
-Her kan du få feilmeldinger ala `error: invalid command \N`
-Dette er ikke den reelle feilen men kan være at tabellene ikke er riktig laget
-eller at man mangler tilgang. feks
-` ERROR:  permission denied for table behandling_versjon
-psql:/data/test.sql:7662: error: invalid command \.`
-Da må man grante `cloudsqliamserviceaccount` mot denne tabellen med rettighetene man trenger.
 
 ## Cleanup
 
-Når du er ferdig med migrering kan du kjøre `cleanup_migration.sh` fra lokal maskin
+Når du er ferdig med migrering kan du kjøre:
 
 ```shell
-bash cleanup_migration.sh
+kubectl delete -f gcloud.yaml
+kubectl delete -f secret.yaml
+kubectl delete -f network-<dev/prod>.yaml
 ```
+
+
+## Mulige problemer
+
+### Feil ved dump av database
+error: invalid command \N
+
+Dette er ikke den reelle feilen, men kan være at dataene ikke er riktig eksportert eller at man mangler tilgang. 
+Feilen kommer vanligvis helt i starten av kjøringen og kan være vanskelig å se. Eksempel
+```shell
+ERROR:  permission denied for table behandling_versjon
+psql:/data/dump.sql:7662: error: invalid command \.`
+```
+
+Løsningen på dette er å gi `cloudsqliamserviceaccount` tilgang til tabellen det feiler for. Se _Forarbeid databaser (steg 2)_. 
+
+### Feil ved oppkobling til database 
+```shell
+pg_dump: error: connection to server at "localhost" (127.0.0.1), port 5432 failed: FATAL:  password authentication failed for user "migration-user@etterlatte-prod-207c.iam"
+```
+Dette betyr vanligvis at service-account brukeren ikke er lagt til i database-instansen. Se _Forarbeid databaser (steg 1)_
+
+### Ikke tilgang til nye tabeller, selv om det er gitt tilgang tidligere
+Dersom nye tabeller er lagt til, må tilganger tildeles på nytt. Se _Forarbeid databaser (steg 2 og steg 3)_.
+
+
+## Øvrig dokumentasjon på confluence
+https://confluence.adeo.no/display/TE/Migreringssteg+for+database
