@@ -11,6 +11,10 @@ Start pod'en som inneholder verktøyene ved å applye til ditt namespace:
 kubectl apply -f gcloud.yaml
 ```
 
+Obs merk at denne er begrenset til maks 512 mb.
+Om man deployer med en ugydlig config må man sjekke loggene til applikasjonsressursen evt serviceressursen som blir opprettet i 
+tillegg til podden.
+
 ### 2. Generer servicebruker
 
 OBS: Hvis det allerede finnes en servicebruker kan denne benyttes.
