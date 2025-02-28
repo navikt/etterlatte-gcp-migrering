@@ -89,7 +89,8 @@ pg_dump -h localhost -p 5432 -U <BRUKER> -d <DATABASE> --schema-only --exclude-t
 ```
 
 Det kan være lurt å tenke på om man vi vil legge på indeksene i etterkant da
-insert med hele tabellen sammen med indeksering kan ta lang tid. 
+insert med hele tabellen sammen med indeksering kan ta lang tid. Sjekk indekstørrelse opp mot tabellstørrelse for 
+å avgjøre dette evt en test i dev/lokalt.
 
 For å kunne lese og skrive til databasene det skal migreres fra og til, må servicebrukeren få tilganger.
 Dette gjøres på følgende måte:
